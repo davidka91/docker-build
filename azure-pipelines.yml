@@ -9,11 +9,73 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+parameters:
+- name: prodName
+  displayName: Product to Build
+  type: string
+  default: 'nginx'
+- name: registry
+  displayName: Registry Hostname
+  type: string
+  default: kimt.jfrog.io'
+- name: targetRepo
+  displayName: Target Repo to push to
+  type: string
+  default: 'davidka-docker-local'
+
+variables:
+  prodName: ${{ parameters.prodName }}
+  registry: ${{ parameters.registry }}
+  targetRepo: ${{ parameters.targetRepo }}
+  buildContext: 'test-$(prodName)'
+  imageNameTb: '$(registry)/$(targetRepo)/test-$(prodName)'
+  imageNameBase: '$(registry)/$(targetRepo)/$(prodName)'
+  
+steps:
+    - task: ArtifactoryToolsInstaller@1
+      inputs:
+        artifactoryService: 'test'
+        cliInstallationRepo: 'jfrog-cli'
+
+    - task: ArtifactoryDocker@1
+      inputs:
+        command: 'pull'
+        artifactoryService: 'test'
+        sourceRepo: 'davidka-docker-local'
+        imageName: '$(imageNameBase)'
+
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'artdocker'
+        repository: '$(targetRepo)/$(buildContext)'
+        command: 'build'
+        Dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        buildContext: 
+        tags: '$(Build.BuildNumber)'
+        arguments: 'build-arg BASEIMAGE=$(imageNameBase)'
+
+    - task: ArtifactoryDocker@1
+      inputs:
+        command: 'push'
+        artifactoryService: 'test'
+        targetRepo: 'davidka-docker-local'
+        imageName: '$(imageNameTb):$(Build.BuildNumber)'
+        collectBuildInfo: true
+        buildName: '$(Build.DefinitionName)'
+        buildNumber: '$(Build.BuildNumber)'
+        includeEnvVars: true
+
+    - task: ArtifactoryPublishBuildInfo@1
+      inputs:
+        artifactoryService: 'test'
+        buildName: '$(Build.DefinitionName)'
+        buildNumber: '$(Build.BuildNumber)'
+
+    - task: ArtifactoryXrayScan@1
+      inputs:
+        artifactoryService: 'test'
+        buildName: '$(Build.DefinitionName)'
+        buildNumber: '$(Build.BuildNumber)'
+        allowFailBuild: true
+
