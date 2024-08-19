@@ -6,10 +6,6 @@
 trigger:
 - main
 
-pool:
-  vmImage: ubuntu-latest
-
-
 parameters:
 - name: prodName
   displayName: Product to Build
